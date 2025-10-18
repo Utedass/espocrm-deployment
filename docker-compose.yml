@@ -1,0 +1,123 @@
+services:
+
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: always
+    ports:
+      - "${CRM_HTTP_PORT}:80"
+      - "${CRM_HTTPS_PORT}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./certs:/etc/caddy/certs            # optional: if you have self-signed certificates
+    environment:
+      - ACME_AGREE=false                     # to automatically obtain certificates
+      - CRM_SITE_HOST=${CRM_SITE_HOST}   # to be used in Caddyfile
+
+  espocrm-db:
+    image: mariadb:latest
+    container_name: espocrm-db
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_DATABASE}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - espocrm-db:/var/lib/mysql
+      - espocrm-db-dump:/backup
+    restart: always
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 20s
+      start_period: 10s
+      timeout: 10s
+      retries: 3
+    labels:
+      - docker-volume-backup.archive-pre=/bin/sh -c 'mariadb-dump --user=espocrm --password=database_password espocrm > /backup/mariadb-dump.sql'
+
+  espocrm:
+    image: espocrm/espocrm
+    container_name: espocrm
+    environment:
+      ESPOCRM_DATABASE_PLATFORM: Mysql
+      ESPOCRM_DATABASE_HOST: espocrm-db
+      ESPOCRM_DATABASE_USER: ${DB_USER}
+      ESPOCRM_DATABASE_PASSWORD: ${DB_PASSWORD}
+      ESPOCRM_ADMIN_USERNAME: ${CRM_ADMIN_USERNAME}
+      ESPOCRM_ADMIN_PASSWORD: ${CRM_ADMIN_PASSWORD}
+      ESPOCRM_SITE_URL: https://${CRM_SITE_HOST}
+    volumes:
+      - espocrm:/var/www/html
+    restart: always
+    depends_on:
+      espocrm-db:
+        condition: service_healthy
+    expose:
+      - 80
+    labels:
+      - docker-volume-backup.stop-during-backup=true
+
+  espocrm-daemon:
+    image: espocrm/espocrm
+    container_name: espocrm-daemon
+    volumes:
+      - espocrm:/var/www/html
+    restart: always
+    depends_on:
+      - espocrm
+    entrypoint: docker-daemon.sh
+    labels:
+      - docker-volume-backup.stop-during-backup=true
+
+  espocrm-websocket:
+    image: espocrm/espocrm
+    container_name: espocrm-websocket
+    environment:
+      ESPOCRM_CONFIG_USE_WEB_SOCKET: "true"
+      ESPOCRM_CONFIG_WEB_SOCKET_URL: "wss://localhost/ws"
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBSCRIBER_DSN: "tcp://*:7777"
+      ESPOCRM_CONFIG_WEB_SOCKET_ZERO_M_Q_SUBMISSION_DSN: "tcp://espocrm-websocket:7777"
+    volumes:
+      - espocrm:/var/www/html
+    restart: always
+    depends_on:
+      - espocrm
+    entrypoint: docker-websocket.sh
+    expose:
+      - 8080
+    labels:
+      - docker-volume-backup.stop-during-backup=true
+  
+  backup:
+    # In production, it is advised to lock your image tag to a proper
+    # release version instead of using `latest`.
+    # Check https://github.com/offen/docker-volume-backup/releases
+    # for a list of available releases.
+    image: offen/docker-volume-backup:latest
+    container_name: espocrm-backup
+    depends_on:
+      - espocrm-db
+      - espocrm
+    restart: always
+    env_file: ./backup-configuration.env # see below for configuration reference
+    volumes:
+      - espocrm:/backup/espocrm:ro
+      - espocrm-db-dump:/backup/db-dump:ro
+
+      # Mounting the Docker socket allows the script to stop and restart
+      # the container during backup. You can omit this if you don't want
+      # to stop the container. In case you need to proxy the socket, you can
+      # also provide a location by setting `DOCKER_HOST` in the container
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+      # If you mount a local directory or volume to `/archive` a local
+      # copy of the backup will be stored there. You can override the
+      # location inside of the container by setting `BACKUP_ARCHIVE`.
+      # You can omit this if you do not want to keep local backups.
+      - ${LOCAL_BACKUP_FOLDER}:/archive
+
+
+volumes:
+  espocrm:
+  espocrm-db:
+  espocrm-db-dump:

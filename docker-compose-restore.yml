@@ -1,0 +1,43 @@
+services:
+  espocrm-db:
+    image: mariadb:latest
+    container_name: espocrm-db
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_DATABASE}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - espocrm-db:/var/lib/mysql
+    restart: always
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 20s
+      start_period: 10s
+      timeout: 10s
+      retries: 3
+
+  espocrm-data-restore:
+    image: mariadb:latest
+    container_name: espocrm-data-restore
+    depends_on:
+      - espocrm-db
+    environment:
+      DB_HOST: espocrm-db
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      RETRIES: 20
+      SLEEP: 2
+    volumes:
+      - espocrm:/restore/espocrm
+      - ./scripts/restore-script.sh:/scripts/restore.sh:ro
+      - ${RESTORE_POINT:?error}:/archive/restore-point.tar.gz:ro
+      - ./restoration-status:/restoration-status
+    entrypoint: /scripts/restore.sh
+    restart: "no"
+
+volumes:
+  espocrm:
+  espocrm-db:

@@ -1,0 +1,17 @@
+{
+    local_certs
+}
+
+{$CRM_SITE_HOST} {
+    reverse_proxy espocrm:80
+
+    reverse_proxy /ws espocrm-websocket:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        #header_up X-Forwarded-For {remote}
+        #header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Optional for Self-Signed SSL Certificate
+    tls /etc/caddy/certs/myserver.crt /etc/caddy/certs/myserver.key
+}
