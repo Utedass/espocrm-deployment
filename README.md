@@ -8,7 +8,7 @@ For custom backup settings, adjust `backup-configuration.env` and possibly the `
 
 # Bring up new system
 
-Update relevant environment variables in `.env`.
+Update relevant environment variables in `.env`. (Yes, it is just called `.env`, not `config.env` or anything like that.)
 
 If have your own certificates you want to use, follow instructions in [Custom certificates](#custom-certificates).
 
@@ -41,7 +41,7 @@ Add your custom certificates to ./certs/ and update the corresponding lines in t
 
 The backup can only be restored to a fresh system. That is, you have to shut down and remove the volumes of any system running that uses the same volume names as your intended new volumes.
 
-First, point to your backup in the `.env` file. (Yes, it is just called `.env`, not `config.env` or anything like that)
+First, point `RESTORE_POINT` to your backup in the `.env` file.
 
 Then run
 
