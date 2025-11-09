@@ -1,18 +1,18 @@
 services:
 
-  caddy:
-    image: caddy:latest
-    container_name: caddy
-    restart: always
-    ports:
-      - "${CRM_HTTP_PORT}:80"
-      - "${CRM_HTTPS_PORT}:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - ./certs:/etc/caddy/certs            # optional: if you have self-signed certificates
-    environment:
-      - ACME_AGREE=false                     # to automatically obtain certificates
-      - CRM_SITE_HOST=${CRM_SITE_HOST}   # to be used in Caddyfile
+  # For local deployment, not uesd if you have other reverse-proxy
+  #caddy:
+  #  image: caddy:latest
+  #  restart: always
+  #  #ports:
+  #    #- "${CRM_HTTP_PORT}:80"
+  #    #- "${CRM_HTTPS_PORT}:443"
+  #  volumes:
+  #    - ./Caddyfile:/etc/caddy/Caddyfile
+  #    - ./certs:/etc/caddy/certs            # optional: if you have self-signed certificates
+  #  environment:
+  #    - ACME_AGREE=false                     # to automatically obtain certificates
+  #    - CRM_SITE_HOST=${CRM_SITE_HOST}   # to be used in Caddyfile
 
   espocrm-db:
     image: mariadb:latest
@@ -49,13 +49,16 @@ services:
     volumes:
       - espocrm:/var/www/html
     restart: always
+    expose:
+      - 80
     depends_on:
       espocrm-db:
         condition: service_healthy
-    expose:
-      - 80
     labels:
       - docker-volume-backup.stop-during-backup=true
+    networks:
+      - default
+      - crm_network
 
   espocrm-daemon:
     image: espocrm/espocrm
@@ -87,6 +90,9 @@ services:
       - 8080
     labels:
       - docker-volume-backup.stop-during-backup=true
+    networks:
+      - default
+      - crm_network
   
   backup:
     # In production, it is advised to lock your image tag to a proper
@@ -121,3 +127,7 @@ volumes:
   espocrm:
   espocrm-db:
   espocrm-db-dump:
+
+networks:
+  crm_network:
+    name: crm_network
